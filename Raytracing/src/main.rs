@@ -1,11 +1,9 @@
 mod camera;
 mod color;
 mod cube;
-mod cylinder;
 mod framebuffer;
 mod light;
 mod ray_intersect;
-mod sphere;
 mod texture;
 
 use minifb::{Key, Window, WindowOptions};
@@ -16,13 +14,11 @@ use std::time::Duration;
 use crate::camera::Camera;
 use crate::color::Color;
 use crate::cube::Cube;
-use crate::cylinder::Cylinder;
 use crate::framebuffer::Framebuffer;
 use crate::light::Light;
 use crate::ray_intersect::{
     Intersect, Material, RayIntersect, DIFFUSE, REFLECTIVITY, SPECULAR, TRANSPARENCY,
 };
-use crate::sphere::Sphere;
 use crate::texture::Texture;
 
 const WIDTH: usize = 800;
@@ -255,78 +251,103 @@ fn main() {
 
     let mut window = Window::new("Lakitu", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
 
-    let ivory = Material::new(Color::new(100, 100, 80), 50.0, [0.6, 0.3, 0.1, 0.0]);
-    let rubber = Material::new(Color::new(80, 0, 0), 10.0, [0.9, 0.1, 0.0, 0.0]);
-    let cobalt = Material::new(Color::new(40, 80, 140), 80.0, [0.7, 0.4, 0.15, 0.0]);
-    let jade = Material::new(Color::new(60, 130, 100), 30.0, [0.8, 0.25, 0.05, 0.0]);
-    let slate = Material::new(Color::new(80, 80, 92), 15.0, [0.85, 0.1, 0.2, 0.0]);
-    let mirror = Material::new(Color::new(255, 255, 255), 1425.0, [0.0, 10.0, 0.85, 0.0]);
+    // --- Texturas del diorama (generadas proceduralmente, ver texture.rs) ---
+    // `Box::leak` les da vida `'static`: se generan una sola vez al arrancar y
+    // quedan vivas mientras corre el programa, así `Material` se mantiene `Copy`.
+    let grass_tex: &'static Texture = Box::leak(Box::new(Texture::grass()));
+    let stone_tex: &'static Texture = Box::leak(Box::new(Texture::stone_bricks()));
+    let wood_tex: &'static Texture = Box::leak(Box::new(Texture::wood_planks()));
+    let water_tex: &'static Texture = Box::leak(Box::new(Texture::water_ripples()));
+    let metal_tex: &'static Texture = Box::leak(Box::new(Texture::metal_shine()));
 
-    // --- Pruebas temporales del sistema de texturas/refracción (sprint 2) ---
-    // `Box::leak` reserva la textura en el heap y le da vida `'static`: se carga
-    // una vez y queda viva mientras corre el programa, que es exactamente lo que
-    // queremos para texturas (igual que en cualquier motor gráfico).
-    let checker_texture: &'static Texture = Box::leak(Box::new(Texture::checkerboard(
-        4,
-        Color::new(235, 235, 235),
-        Color::new(35, 35, 40),
+    // --- Los 5 materiales del diorama, cada uno con su propia textura y sus
+    // propios pesos de difuso/especular/reflectividad/transparencia ---
+    let grass = Material::new_textured(grass_tex, 8.0, [0.9, 0.05, 0.0, 0.0], 1.0);
+    let stone = Material::new_textured(stone_tex, 20.0, [0.8, 0.2, 0.05, 0.0], 1.0);
+    let wood = Material::new_textured(wood_tex, 12.0, [0.85, 0.15, 0.02, 0.0], 1.0);
+    let water = Material::new_textured(water_tex, 90.0, [0.1, 0.4, 0.15, 0.85], 1.33);
+    let sword_metal =
+        Material::new_textured(metal_tex, 200.0, [0.15, 0.6, 0.55, 0.0], 1.0);
+
+    // --- Layout: "Rincón de Hyrule" ---
+    let mut objects: Vec<Box<dyn RayIntersect>> = Vec::new();
+
+    // Piso: cuadrícula de 6x6 cubos de pasto, con un camino de piedra cruzando el
+    // centro y un pequeño estanque en una esquina.
+    const FLOOR_TILES: i32 = 6;
+    const TILE: f32 = 1.0;
+    let offset = (FLOOR_TILES as f32 - 1.0) / 2.0;
+
+    for gx in 0..FLOOR_TILES {
+        for gz in 0..FLOOR_TILES {
+            let x = (gx as f32 - offset) * TILE;
+            let z = (gz as f32 - offset) * TILE;
+            let center = Vec3::new(x, -1.5, z);
+
+            let is_path = gz == 3 && (1..=4).contains(&gx);
+            let is_pond = gx >= 4 && gz <= 1;
+
+            let material = if is_pond {
+                water
+            } else if is_path {
+                stone
+            } else {
+                grass
+            };
+
+            objects.push(Box::new(Cube::new(center, TILE, material)));
+        }
+    }
+
+    // Árbol Korok: tronco de dos cubos de madera apilados + copa de pasto en cruz.
+    let tree_x = (-offset) * TILE;
+    let tree_z = (1.0 - offset) * TILE;
+    objects.push(Box::new(Cube::new(Vec3::new(tree_x, -0.7, tree_z), 0.6, wood)));
+    objects.push(Box::new(Cube::new(Vec3::new(tree_x, -0.1, tree_z), 0.6, wood)));
+    for (dx, dz) in [(0.0, 0.0), (0.7, 0.0), (-0.7, 0.0), (0.0, 0.7), (0.0, -0.7)] {
+        objects.push(Box::new(Cube::new(
+            Vec3::new(tree_x + dx, 0.55, tree_z + dz),
+            0.75,
+            grass,
+        )));
+    }
+
+    // Cofre de madera, apoyado sobre el piso.
+    let chest_x = (4.0 - offset) * TILE;
+    let chest_z = (4.0 - offset) * TILE;
+    objects.push(Box::new(Cube::new(
+        Vec3::new(chest_x, -0.75, chest_z),
+        0.5,
+        wood,
     )));
-    let checkered = Material::new_textured(checker_texture, 10.0, [0.9, 0.1, 0.0, 0.0], 1.0);
 
-    let glass = Material::new(Color::new(245, 250, 255), 125.0, [0.05, 0.5, 0.05, 0.9])
-        .with_refractive_index(1.5);
-    // --- Fin de pruebas temporales ---
-
-    let objects: Vec<Box<dyn RayIntersect>> = vec![
-        Box::new(Cylinder::new(
-            Vec3::new(0.0, -2.0, 0.0),
-            Vec3::new(0.0, 1.0, 0.0),
-            0.25,
-            6.0,
-            slate,
-        )),
-        Box::new(Sphere {
-            center: Vec3::new(0.0, -0.75, 0.0),
-            radius: 1.0,
-            material: ivory,
-        }),
-        Box::new(Sphere {
-            center: Vec3::new(1.9, -1.25, -0.9),
-            radius: 0.5,
-            material: rubber,
-        }),
-        Box::new(Sphere {
-            center: Vec3::new(-1.5, -1.25, 1.1),
-            radius: 0.5,
-            material: cobalt,
-        }),
-        Box::new(Cylinder::new(
-            Vec3::new(-2.3, -1.75, -0.6),
-            Vec3::new(0.28, 1.0, -0.12),
-            2.0,
-            0.35,
-            jade,
-        )),
-        Box::new(Sphere {
-            center: Vec3::new(2.35, -1.0, 1.45),
-            radius: 0.75,
-            material: mirror,
-        }),
-        // Cubo de prueba temporal #1: valida que el mapeo UV por cara se ve bien
-        // (el tablero de ajedrez debe verse derecho y sin estirones en las 3 caras
-        // visibles).
-        Box::new(Cube::new(Vec3::new(-0.5, 1.2, -0.5), 1.0, checkered)),
-        // Cubo de prueba temporal #2: valida refracción — debería verse el fondo
-        // (y los otros objetos) distorsionado a través de este cubo, con un borde
-        // más reflejante en ángulos rasantes por el Fresnel.
-        Box::new(Cube::new(Vec3::new(1.0, 1.2, 1.0), 1.0, glass)),
-    ];
+    // Pedestal de piedra con la Espada Maestra clavada encima: la hoja es un cubo
+    // delgado (min/max explícitos en vez de un cubo uniforme) para que se vea como
+    // una hoja de espada y no como un bloque.
+    let sword_x = (2.0 - offset) * TILE;
+    let sword_z = (2.0 - offset) * TILE;
+    objects.push(Box::new(Cube::new(
+        Vec3::new(sword_x, -0.7, sword_z),
+        0.6,
+        stone,
+    )));
+    objects.push(Box::new(Cube::from_bounds(
+        Vec3::new(sword_x - 0.04, -0.4, sword_z - 0.09),
+        Vec3::new(sword_x + 0.04, 0.55, sword_z + 0.09),
+        sword_metal,
+    )));
+    // Guarda de la espada: una lámina más ancha y corta cruzando la hoja.
+    objects.push(Box::new(Cube::from_bounds(
+        Vec3::new(sword_x - 0.22, -0.45, sword_z - 0.05),
+        Vec3::new(sword_x + 0.22, -0.35, sword_z + 0.05),
+        sword_metal,
+    )));
 
     let light = Light::new(Vec3::new(-6.0, 6.0, 8.0), Color::new(255, 255, 255), 1.5);
 
     let mut camera = Camera::new(
-        Vec3::new(0.0, 0.4, 6.0),
-        Vec3::new(0.0, -0.7, 0.0),
+        Vec3::new(0.5, 3.2, 7.5),
+        Vec3::new(0.0, -1.0, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
     );
 
