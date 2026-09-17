@@ -50,6 +50,20 @@ impl Mul<f32> for Color {
     }
 }
 
+/// Multiplicación canal por canal (normalizada a 255) — se usa para teñir un
+/// color con otro, por ejemplo aplicar un tinte ambiental sobre un difuso.
+impl Mul<Color> for Color {
+    type Output = Color;
+
+    fn mul(self, other: Color) -> Color {
+        Color {
+            r: ((self.r as u16 * other.r as u16) / 255) as u8,
+            g: ((self.g as u16 * other.g as u16) / 255) as u8,
+            b: ((self.b as u16 * other.b as u16) / 255) as u8,
+        }
+    }
+}
+
 impl fmt::Display for Color {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Color(r: {}, g: {}, b: {})", self.r, self.g, self.b)

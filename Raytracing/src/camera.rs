@@ -3,6 +3,12 @@ use std::f32::consts::PI;
 
 const PITCH_LIMIT: f32 = PI / 2.0 - 0.1;
 
+// Qué tan cerca/lejos del centro de la escena puede llegar la cámara con zoom.
+// El mínimo evita que la cámara termine dentro de un objeto; el máximo evita
+// alejarse tanto que el diorama se vea como un punto.
+const MIN_ZOOM_DISTANCE: f32 = 2.5;
+const MAX_ZOOM_DISTANCE: f32 = 18.0;
+
 pub struct Camera {
     pub eye: Vec3,
     pub center: Vec3,
@@ -43,5 +49,16 @@ impl Camera {
                 -radius * new_pitch.sin(),
                 radius * new_yaw.sin() * new_pitch.cos(),
             );
+    }
+
+    /// Acerca (`delta` negativo) o aleja (`delta` positivo) la cámara del centro
+    /// de la escena, manteniendo el mismo ángulo de vista — solo cambia el radio
+    /// de la esfera sobre la que orbita `orbit()`.
+    pub fn zoom(&mut self, delta: f32) {
+        let radius_vector = self.eye - self.center;
+        let radius = radius_vector.magnitude();
+        let new_radius = (radius + delta).clamp(MIN_ZOOM_DISTANCE, MAX_ZOOM_DISTANCE);
+
+        self.eye = self.center + radius_vector.normalize() * new_radius;
     }
 }

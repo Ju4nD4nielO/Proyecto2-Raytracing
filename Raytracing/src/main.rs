@@ -4,6 +4,7 @@ mod cube;
 mod framebuffer;
 mod light;
 mod ray_intersect;
+mod sky;
 mod texture;
 
 use minifb::{Key, Window, WindowOptions};
@@ -19,15 +20,16 @@ use crate::light::Light;
 use crate::ray_intersect::{
     Intersect, Material, RayIntersect, DIFFUSE, REFLECTIVITY, SPECULAR, TRANSPARENCY,
 };
+use crate::sky::sample_skybox;
 use crate::texture::Texture;
 
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
-const BACKGROUND_COLOR: u32 = 0x040C24;
 
-const FOV: f32 = PI / 3.0;
+const FOV: f32 = 50.0 * PI / 180.0;
 
 const ROTATION_SPEED: f32 = PI / 60.0;
+const ZOOM_SPEED: f32 = 0.15;
 
 const SHADOW_BIAS: f32 = 1e-3;
 // Usado para separar el origen de un rayo reflejado/refractado de la superficie
@@ -35,6 +37,10 @@ const SHADOW_BIAS: f32 = 1e-3;
 const BIAS: f32 = 1e-3;
 
 const MAX_DEPTH: u32 = 3;
+
+// Luz de cielo rebotada, tenue y con un tinte ligeramente azulado, para que las
+// zonas en sombra no queden completamente negras.
+const AMBIENT_INTENSITY: f32 = 0.18;
 
 pub fn reflect(incident: &Vec3, normal: &Vec3) -> Vec3 {
     incident - normal * (2.0 * dot(incident, normal))
@@ -109,44 +115,62 @@ pub fn cast_shadow(
 pub fn shade(
     intersect: &Intersect,
     ray_origin: &Vec3,
-    light: &Light,
+    lights: &[Light],
     objects: &[Box<dyn RayIntersect>],
 ) -> Color {
-    let light_direction = (light.position - intersect.point).normalize();
     let view_direction = (ray_origin - intersect.point).normalize();
-
-    let light_intensity = if cast_shadow(intersect, &light_direction, light, objects) {
-        0.0
-    } else {
-        light.intensity
-    };
-
     let diffuse_color = intersect.material.sample_diffuse(intersect.uv);
 
-    let diffuse_intensity = dot(&intersect.normal, &light_direction).max(0.0);
-    let diffuse =
-        diffuse_color * (diffuse_intensity * intersect.material.albedo[DIFFUSE] * light_intensity);
+    // Contribución ambiental: no depende de sombras ni de ninguna luz puntual,
+    // así que se calcula una sola vez, afuera del loop de luces.
+    let ambient_tint = Color::new(150, 180, 215);
+    let mut color =
+        diffuse_color * ambient_tint * (AMBIENT_INTENSITY * intersect.material.albedo[DIFFUSE]);
 
-    let reflect_direction = reflect(&-light_direction, &intersect.normal);
-    let specular_intensity = dot(&view_direction, &reflect_direction)
-        .max(0.0)
-        .powf(intersect.material.specular);
+    for light in lights {
+        let light_direction = (light.position - intersect.point).normalize();
 
-    let specular = light.color
-        * (specular_intensity * intersect.material.albedo[SPECULAR] * light_intensity);
+        let light_intensity = if cast_shadow(intersect, &light_direction, light, objects) {
+            0.0
+        } else {
+            light.intensity
+        };
 
-    diffuse + specular
+        if light_intensity <= 0.0 {
+            continue;
+        }
+
+        let diffuse_intensity = dot(&intersect.normal, &light_direction).max(0.0);
+        let diffuse = diffuse_color
+            * (diffuse_intensity * intersect.material.albedo[DIFFUSE] * light_intensity);
+
+        let reflect_direction = reflect(&-light_direction, &intersect.normal);
+        let specular_intensity = dot(&view_direction, &reflect_direction)
+            .max(0.0)
+            .powf(intersect.material.specular);
+
+        let specular = light.color
+            * (specular_intensity * intersect.material.albedo[SPECULAR] * light_intensity);
+
+        color = color + diffuse + specular;
+    }
+
+    color
 }
 
 pub fn cast_ray(
     ray_origin: &Vec3,
     ray_direction: &Vec3,
     objects: &[Box<dyn RayIntersect>],
-    light: &Light,
+    lights: &[Light],
     depth: u32,
 ) -> Color {
+    // La primera luz es la "key light" (el sol) — es la que orienta el halo del
+    // skybox cuando un rayo no golpea nada.
+    let sun_position = &lights[0].position;
+
     if depth > MAX_DEPTH {
-        return Color::from_hex(BACKGROUND_COLOR);
+        return sample_skybox(ray_direction, sun_position);
     }
 
     let mut closest: Option<Intersect> = None;
@@ -160,10 +184,10 @@ pub fn cast_ray(
     }
 
     let Some(intersect) = closest else {
-        return Color::from_hex(BACKGROUND_COLOR);
+        return sample_skybox(ray_direction, sun_position);
     };
 
-    let local_color = shade(&intersect, ray_origin, light, objects);
+    let local_color = shade(&intersect, ray_origin, lights, objects);
 
     let reflectivity = intersect.material.albedo[REFLECTIVITY];
     let transparency = intersect.material.albedo[TRANSPARENCY];
@@ -186,7 +210,7 @@ pub fn cast_ray(
     let reflected = if effective_reflectivity > 0.0 {
         let reflect_direction = reflect(ray_direction, &intersect.normal).normalize();
         let reflect_origin = offset_origin(&intersect, &reflect_direction);
-        cast_ray(&reflect_origin, &reflect_direction, objects, light, depth + 1)
+        cast_ray(&reflect_origin, &reflect_direction, objects, lights, depth + 1)
     } else {
         Color::from_hex(0)
     };
@@ -198,7 +222,7 @@ pub fn cast_ray(
             Some(refract_direction) => {
                 let refract_direction = refract_direction.normalize();
                 let refract_origin = offset_origin(&intersect, &refract_direction);
-                cast_ray(&refract_origin, &refract_direction, objects, light, depth + 1)
+                cast_ray(&refract_origin, &refract_direction, objects, lights, depth + 1)
             }
             // Reflexión interna total: no hay rayo refractado, toda la energía
             // que no se manejó como reflexión "base" también rebota.
@@ -217,7 +241,7 @@ pub fn render(
     framebuffer: &mut Framebuffer,
     objects: &[Box<dyn RayIntersect>],
     camera: &Camera,
-    light: &Light,
+    lights: &[Light],
 ) {
     let width = framebuffer.width as f32;
     let height = framebuffer.height as f32;
@@ -237,7 +261,7 @@ pub fn render(
             let ray_direction = camera.basis_change(&ray_direction);
 
             framebuffer.set_current_color(
-                cast_ray(&camera.eye, &ray_direction, objects, light, 0).to_hex(),
+                cast_ray(&camera.eye, &ray_direction, objects, lights, 0).to_hex(),
             );
             framebuffer.point(x, y);
         }
@@ -343,11 +367,17 @@ fn main() {
         sword_metal,
     )));
 
-    let light = Light::new(Vec3::new(-6.0, 6.0, 8.0), Color::new(255, 255, 255), 1.5);
+    // Dos luces: una cálida principal (el "sol", tipo atardecer) que proyecta
+    // sombras marcadas, y una fría de relleno bastante más tenue del lado
+    // opuesto, para que las sombras no queden completamente planas — el
+    // contraste cálido/frío también ayuda a que el agua y la espada resalten.
+    let key_light = Light::new(Vec3::new(-6.0, 7.0, 5.0), Color::new(255, 214, 170), 1.6);
+    let fill_light = Light::new(Vec3::new(5.0, 3.5, -4.0), Color::new(140, 170, 255), 0.35);
+    let lights = [key_light, fill_light];
 
     let mut camera = Camera::new(
-        Vec3::new(0.5, 3.2, 7.5),
-        Vec3::new(0.0, -1.0, 0.0),
+        Vec3::new(3.6, 2.6, 6.4),
+        Vec3::new(0.0, -0.8, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
     );
 
@@ -368,8 +398,17 @@ fn main() {
             }
         }
 
+        if window.is_key_down(Key::Q) {
+            camera.zoom(-ZOOM_SPEED);
+            camera_moved = true;
+        }
+        if window.is_key_down(Key::E) {
+            camera.zoom(ZOOM_SPEED);
+            camera_moved = true;
+        }
+
         if camera_moved {
-            render(&mut framebuffer, &objects, &camera, &light);
+            render(&mut framebuffer, &objects, &camera, &lights);
             camera_moved = false;
         }
 
