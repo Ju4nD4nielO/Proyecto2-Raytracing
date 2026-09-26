@@ -20,15 +20,13 @@ impl Camera {
         Camera { eye, center, up }
     }
 
-    pub fn basis_change(&self, vector: &Vec3) -> Vec3 {
+    /// Devuelve los tres ejes de la camara. Se calcula una vez por render en vez
+    /// de repetir los productos cruz y normalizaciones para cada pixel.
+    pub fn basis(&self) -> (Vec3, Vec3, Vec3) {
         let forward = (self.center - self.eye).normalize();
         let right = forward.cross(&self.up).normalize();
-
         let up = right.cross(&forward).normalize();
-
-        let rotated = vector.x * right + vector.y * up - vector.z * forward;
-
-        rotated.normalize()
+        (forward, right, up)
     }
 
     pub fn orbit(&mut self, delta_yaw: f32, delta_pitch: f32) {

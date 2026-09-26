@@ -28,8 +28,8 @@ pub fn sample_skybox(direction: &Vec3, sun_position: &Vec3) -> Color {
     // dispersas y atenuado cerca del horizonte.
     let cloud_u = d.x.atan2(d.z) * 3.0;
     let cloud_v = d.y * 6.0;
-    let noise = (cloud_u.sin() * 1.7 + cloud_v.cos() * 1.3 + (cloud_u * 2.3).sin() * 0.6) * 0.5
-        + 0.5;
+    let noise =
+        (cloud_u.sin() * 1.7 + cloud_v.cos() * 1.3 + (cloud_u * 2.3).sin() * 0.6) * 0.5 + 0.5;
     let cloud_mask = ((noise - 0.62).max(0.0) * 3.0).min(1.0) * d.y.max(0.0).sqrt();
 
     let color = sky + Vec3::new(sun_glow, sun_glow * 0.9, sun_glow * 0.6);

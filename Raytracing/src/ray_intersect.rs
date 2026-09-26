@@ -77,6 +77,8 @@ pub struct Intersect {
     pub uv: (f32, f32),
 }
 
-pub trait RayIntersect {
+// `Sync` permite repartir las filas del render entre los hilos de la biblioteca
+// estandar. Los objetos solo se leen durante el render.
+pub trait RayIntersect: Sync {
     fn ray_intersect(&self, ray_origin: &Vec3, ray_direction: &Vec3) -> Option<Intersect>;
 }

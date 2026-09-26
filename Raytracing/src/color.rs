@@ -21,7 +21,7 @@ impl Color {
         }
     }
 
-    pub fn to_hex(&self) -> u32 {
+    pub fn to_hex(self) -> u32 {
         ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
 }
