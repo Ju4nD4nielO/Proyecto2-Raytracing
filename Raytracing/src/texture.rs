@@ -37,7 +37,11 @@ impl Texture {
             for x in 0..resolution {
                 let cell_x = (x * cells) / resolution;
                 let cell_y = (y * cells) / resolution;
-                pixels.push(if (cell_x + cell_y) % 2 == 0 { a } else { b });
+                pixels.push(if (cell_x + cell_y).is_multiple_of(2) {
+                    a
+                } else {
+                    b
+                });
             }
         }
 
@@ -65,7 +69,11 @@ impl Texture {
             }
         }
 
-        Texture { width: resolution, height: resolution, pixels }
+        Texture {
+            width: resolution,
+            height: resolution,
+            pixels,
+        }
     }
 
     /// Piedra de santuario: patrón de ladrillos con ruido de superficie y un
@@ -99,7 +107,11 @@ impl Texture {
             }
         }
 
-        Texture { width: resolution, height: resolution, pixels }
+        Texture {
+            width: resolution,
+            height: resolution,
+            pixels,
+        }
     }
 
     /// Madera en tablones verticales, con vetas onduladas y una línea oscura en
@@ -126,7 +138,11 @@ impl Texture {
             }
         }
 
-        Texture { width: resolution, height: resolution, pixels }
+        Texture {
+            width: resolution,
+            height: resolution,
+            pixels,
+        }
     }
 
     /// Superficie de agua: gradiente azul con ondas superpuestas (senos cruzados)
@@ -146,7 +162,11 @@ impl Texture {
             }
         }
 
-        Texture { width: resolution, height: resolution, pixels }
+        Texture {
+            width: resolution,
+            height: resolution,
+            pixels,
+        }
     }
 
     /// Metal plateado-azulado con una banda de brillo diagonal, como el filo de
@@ -171,7 +191,11 @@ impl Texture {
             }
         }
 
-        Texture { width: resolution, height: resolution, pixels }
+        Texture {
+            width: resolution,
+            height: resolution,
+            pixels,
+        }
     }
 
     /// Carga una imagen PPM binaria (P6) desde disco.
@@ -250,7 +274,8 @@ fn hash(mut x: u32) -> u32 {
 /// Valor pseudoaleatorio determinista en [0, 1] para el pixel (x, y), usado como
 /// ruido de superficie en las texturas procedurales.
 fn value_at(x: usize, y: usize, seed: u32) -> f32 {
-    let h = hash((x as u32).wrapping_mul(374_761_393) ^ (y as u32).wrapping_mul(668_265_263) ^ seed);
+    let h =
+        hash((x as u32).wrapping_mul(374_761_393) ^ (y as u32).wrapping_mul(668_265_263) ^ seed);
     (h % 1000) as f32 / 1000.0
 }
 

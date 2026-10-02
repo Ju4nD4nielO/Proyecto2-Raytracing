@@ -3,6 +3,12 @@ use std::f32::consts::PI;
 
 const PITCH_LIMIT: f32 = PI / 2.0 - 0.1;
 
+// Qué tan cerca/lejos del centro de la escena puede llegar la cámara con zoom.
+// El mínimo evita que la cámara termine dentro de un objeto; el máximo evita
+// alejarse tanto que el diorama se vea como un punto.
+const MIN_ZOOM_DISTANCE: f32 = 2.5;
+const MAX_ZOOM_DISTANCE: f32 = 18.0;
+
 pub struct Camera {
     pub eye: Vec3,
     pub center: Vec3,
@@ -14,15 +20,13 @@ impl Camera {
         Camera { eye, center, up }
     }
 
-    pub fn basis_change(&self, vector: &Vec3) -> Vec3 {
+    /// Devuelve los tres ejes de la camara. Se calcula una vez por render en vez
+    /// de repetir los productos cruz y normalizaciones para cada pixel.
+    pub fn basis(&self) -> (Vec3, Vec3, Vec3) {
         let forward = (self.center - self.eye).normalize();
         let right = forward.cross(&self.up).normalize();
-
         let up = right.cross(&forward).normalize();
-
-        let rotated = vector.x * right + vector.y * up - vector.z * forward;
-
-        rotated.normalize()
+        (forward, right, up)
     }
 
     pub fn orbit(&mut self, delta_yaw: f32, delta_pitch: f32) {
@@ -43,5 +47,14 @@ impl Camera {
                 -radius * new_pitch.sin(),
                 radius * new_yaw.sin() * new_pitch.cos(),
             );
+    }
+
+    
+    pub fn zoom(&mut self, delta: f32) {
+        let radius_vector = self.eye - self.center;
+        let radius = radius_vector.magnitude();
+        let new_radius = (radius + delta).clamp(MIN_ZOOM_DISTANCE, MAX_ZOOM_DISTANCE);
+
+        self.eye = self.center + radius_vector.normalize() * new_radius;
     }
 }
