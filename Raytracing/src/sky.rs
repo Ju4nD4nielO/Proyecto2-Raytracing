@@ -1,17 +1,11 @@
 use crate::color::Color;
 use nalgebra_glm::Vec3;
 
-/// Cielo procedural: gradiente de horizonte a cenit, un halo de sol alineado con
-/// la luz de la escena, y nubes dispersas generadas con ruido de baja frecuencia.
-/// No es una imagen panorámica cargada de archivo — se calcula directamente a
-/// partir de la dirección del rayo, así que no depende de ningún asset externo.
+
 pub fn sample_skybox(direction: &Vec3, sun_position: &Vec3) -> Color {
     let d = direction.normalize();
 
-    // Gradiente vertical: celeste claro cerca del horizonte, azul más profundo
-    // hacia el cenit. `d.y` va de -1 (abajo) a 1 (arriba); usamos solo la mitad
-    // positiva porque casi nada de lo que ve la cámara mira hacia abajo del
-    // horizonte (el piso del diorama ya tapa esos rayos).
+
     let t = d.y.max(0.0).powf(0.5);
     let horizon = Vec3::new(190.0, 222.0, 235.0);
     let zenith = Vec3::new(60.0, 120.0, 200.0);

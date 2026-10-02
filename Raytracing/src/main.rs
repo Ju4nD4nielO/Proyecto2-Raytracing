@@ -508,43 +508,129 @@ fn build_scene(
         stone,
     );
 
-    // Espada Maestra: punta clavada, hoja ascendente, guarda, empunadura y pomo.
+    // Variantes del mismo metal.ppm: conservan su textura, pero separan la
+    // paleta y las propiedades opticas de cada parte de la Espada Maestra.
+    let sword_blade = Material {
+        specular: 70.0,
+        albedo: [0.72, 0.25, 0.12, 0.0],
+        ..metal.with_tint(Color::new(175, 235, 245))
+    };
+    let sword_guard = Material {
+        specular: 55.0,
+        albedo: [0.72, 0.22, 0.16, 0.0],
+        ..metal.with_tint(Color::new(65, 75, 155))
+    };
+    let sword_grip = Material {
+        specular: 30.0,
+        albedo: [0.82, 0.15, 0.06, 0.0],
+        ..metal.with_tint(Color::new(65, 125, 85))
+    };
+    let sword_gold = Material {
+        specular: 75.0,
+        albedo: [0.68, 0.25, 0.22, 0.0],
+        ..metal.with_tint(Color::new(255, 190, 65))
+    };
+
+    // Hoja cian escalonada: ancha cerca de la guarda y terminada en punta hacia
+    // el pedestal. La baja reflectividad deja visible la textura metalica.
+    for (half_width, min_y, max_y, half_depth) in [
+        (0.035, -0.08, 0.04, 0.035),
+        (0.075, 0.04, 0.2, 0.045),
+        (0.115, 0.2, 0.88, 0.055),
+        (0.15, 0.88, 1.08, 0.065),
+    ] {
+        add_box(
+            &mut objects,
+            Vec3::new(shrine_x - half_width, min_y, shrine_z - half_depth),
+            Vec3::new(shrine_x + half_width, max_y, shrine_z + half_depth),
+            sword_blade,
+        );
+    }
+
+    // Marca vertical sobre la cara frontal de la hoja, inspirada en los grabados
+    // de la espada original.
     add_box(
         &mut objects,
-        Vec3::new(shrine_x - 0.035, -0.08, shrine_z - 0.04),
-        Vec3::new(shrine_x + 0.035, 0.18, shrine_z + 0.04),
-        metal,
+        Vec3::new(shrine_x - 0.018, 0.32, shrine_z + 0.056),
+        Vec3::new(shrine_x + 0.018, 0.74, shrine_z + 0.072),
+        sword_guard,
     );
+
+    // Guarda alada. Los tres escalones de cada lado producen la curva descendente
+    // de la referencia usando unicamente prismas rectangulares.
+    for side in [-1.0_f32, 1.0] {
+        let (inner, outer) = if side < 0.0 {
+            (shrine_x - 0.24, shrine_x - 0.08)
+        } else {
+            (shrine_x + 0.08, shrine_x + 0.24)
+        };
+        add_box(
+            &mut objects,
+            Vec3::new(inner.min(outer), 1.04, shrine_z - 0.11),
+            Vec3::new(inner.max(outer), 1.18, shrine_z + 0.11),
+            sword_guard,
+        );
+
+        let (inner, outer) = if side < 0.0 {
+            (shrine_x - 0.4, shrine_x - 0.24)
+        } else {
+            (shrine_x + 0.24, shrine_x + 0.4)
+        };
+        add_box(
+            &mut objects,
+            Vec3::new(inner.min(outer), 0.96, shrine_z - 0.1),
+            Vec3::new(inner.max(outer), 1.11, shrine_z + 0.1),
+            sword_guard,
+        );
+
+        let (inner, outer) = if side < 0.0 {
+            (shrine_x - 0.54, shrine_x - 0.4)
+        } else {
+            (shrine_x + 0.4, shrine_x + 0.54)
+        };
+        add_box(
+            &mut objects,
+            Vec3::new(inner.min(outer), 0.86, shrine_z - 0.085),
+            Vec3::new(inner.max(outer), 1.02, shrine_z + 0.085),
+            sword_guard,
+        );
+    }
+
+    // Empunadura verde con bandas azul oscuro.
     add_box(
         &mut objects,
-        Vec3::new(shrine_x - 0.06, 0.18, shrine_z - 0.045),
-        Vec3::new(shrine_x + 0.06, 0.76, shrine_z + 0.045),
-        metal,
+        Vec3::new(shrine_x - 0.065, 1.13, shrine_z - 0.065),
+        Vec3::new(shrine_x + 0.065, 1.72, shrine_z + 0.065),
+        sword_grip,
     );
-    add_box(
-        &mut objects,
-        Vec3::new(shrine_x - 0.085, 0.76, shrine_z - 0.055),
-        Vec3::new(shrine_x + 0.085, 1.08, shrine_z + 0.055),
-        metal,
-    );
-    add_box(
-        &mut objects,
-        Vec3::new(shrine_x - 0.38, 1.02, shrine_z - 0.09),
-        Vec3::new(shrine_x + 0.38, 1.15, shrine_z + 0.09),
-        metal,
-    );
-    add_box(
-        &mut objects,
-        Vec3::new(shrine_x - 0.075, 1.12, shrine_z - 0.075),
-        Vec3::new(shrine_x + 0.075, 1.65, shrine_z + 0.075),
-        metal,
-    );
-    add_cube(
-        &mut objects,
-        Vec3::new(shrine_x, 1.73, shrine_z),
-        0.22,
-        metal,
-    );
+    for y in [1.22, 1.38, 1.54, 1.68] {
+        add_box(
+            &mut objects,
+            Vec3::new(shrine_x - 0.078, y, shrine_z - 0.078),
+            Vec3::new(shrine_x + 0.078, y + 0.035, shrine_z + 0.078),
+            sword_guard,
+        );
+    }
+
+    // Gema dorada frontal en el centro de la guarda.
+    for (half_width, min_y, max_y) in [(0.035, 0.91, 1.0), (0.075, 1.0, 1.12), (0.04, 1.12, 1.2)] {
+        add_box(
+            &mut objects,
+            Vec3::new(shrine_x - half_width, min_y, shrine_z + 0.112),
+            Vec3::new(shrine_x + half_width, max_y, shrine_z + 0.145),
+            sword_gold,
+        );
+    }
+
+    // Pomo facetado por escalones, similar al remate azul de la referencia.
+    for (half_width, min_y, max_y) in [(0.09, 1.72, 1.84), (0.14, 1.84, 2.0), (0.075, 2.0, 2.12)] {
+        add_box(
+            &mut objects,
+            Vec3::new(shrine_x - half_width, min_y, shrine_z - 0.09),
+            Vec3::new(shrine_x + half_width, max_y, shrine_z + 0.09),
+            sword_guard,
+        );
+    }
 
     // Cristales de energia antigua. El agua aporta el cian, la transparencia y
     // los reflejos sin agregar un sexto material.

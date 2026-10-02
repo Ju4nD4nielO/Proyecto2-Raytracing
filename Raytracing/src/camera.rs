@@ -49,9 +49,7 @@ impl Camera {
             );
     }
 
-    /// Acerca (`delta` negativo) o aleja (`delta` positivo) la cámara del centro
-    /// de la escena, manteniendo el mismo ángulo de vista — solo cambia el radio
-    /// de la esfera sobre la que orbita `orbit()`.
+    
     pub fn zoom(&mut self, delta: f32) {
         let radius_vector = self.eye - self.center;
         let radius = radius_vector.magnitude();
