@@ -29,4 +29,4 @@ usar arte propio, consulta [la guia de assets](Raytracing/assets/README.md).
 
 ## Video
 
-<!-- Agregar aqui el enlace o archivo del video final antes de entregar. -->
+https://youtu.be/Xlz4sMLvbrg
